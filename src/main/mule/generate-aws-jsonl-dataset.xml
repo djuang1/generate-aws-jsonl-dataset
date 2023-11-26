@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:s3="http://www.mulesoft.org/schema/mule/s3" xmlns:file="http://www.mulesoft.org/schema/mule/file"
+	xmlns:java="http://www.mulesoft.org/schema/mule/java"
+	xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns:salesforce="http://www.mulesoft.org/schema/mule/salesforce" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/salesforce http://www.mulesoft.org/schema/mule/salesforce/current/mule-salesforce.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/java http://www.mulesoft.org/schema/mule/java/current/mule-java.xsd
+http://www.mulesoft.org/schema/mule/file http://www.mulesoft.org/schema/mule/file/current/mule-file.xsd
+http://www.mulesoft.org/schema/mule/s3 http://www.mulesoft.org/schema/mule/s3/current/mule-s3.xsd">
+	<salesforce:sfdc-config name="Salesforce_Config" doc:name="Salesforce Config" doc:id="cbd4bf84-7e55-416c-8540-7125c7762343" >
+		<salesforce:basic-connection username="${sfdc.username}" password="${sfdc.password}" />
+	</salesforce:sfdc-config>
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" doc:id="840aca08-929b-4464-9450-616d35a5b653" >
+		<http:listener-connection host="0.0.0.0" port="8081" />
+	</http:listener-config>
+	<configuration-properties doc:name="Configuration properties" doc:id="1fb76a2b-1996-46d5-9a03-b316e68370ed" file="mule-properties.yaml" />
+	<s3:config name="Amazon_S3_Configuration" doc:name="Amazon S3 Configuration" doc:id="24746177-65d6-4856-ba37-c33cc339f91e" >
+		<s3:connection accessKey="${aws.key}" secretKey="${aws.secret}" />
+	</s3:config>
+	<flow name="generate-aws-jsonl-datasetFlow" doc:id="c678b910-404a-4622-9335-072cf75249ec" >
+		<http:listener doc:name="Listener" doc:id="fc2b72c5-e304-4641-b29c-b031d9d29246" config-ref="HTTP_Listener_config" path="/contacts"/>
+		<salesforce:query doc:name="Query" doc:id="7f76a4e5-e28d-48e5-b9dc-ca6d325e9cea" config-ref="Salesforce_Config">
+			<salesforce:salesforce-query ><![CDATA[SELECT Title,Chat_Answer__c FROM Knowledge__kav WHERE Language = 'en_US' and Chat_Answer__c <> '' LIMIT 10]]></salesforce:salesforce-query>
+		</salesforce:query>
+		<ee:transform doc:name="Transform Message" doc:id="f5fe5a0a-268b-4fd9-a6b1-45cc24cf172f" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/csv
+---
+payload map ( payload01 , indexOfPayload01 ) -> {
+	prompt: "'" ++ ((payload01.Title replace "\n" with " ") replace "\"" with "'" default "") ++ "'",
+	completion: "'" ++ ((payload01.Chat_Answer__c replace "\n" with " ") replace "\"" with "'" default "") ++ "'"
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<java:invoke-static method="convertCSVtoJSONL(java.io.InputStream)" doc:name="Invoke static" doc:id="3a7229b1-88bc-4f16-a616-1b658bd7863f" class="com.dejim.JSONLUtility">
+			<java:args ><![CDATA[#[output application/java
+---
+{
+	arg0: payload
+}]]]></java:args>
+		</java:invoke-static>
+		<scatter-gather doc:name="Scatter-Gather" doc:id="cff2b52c-1ac3-414f-9be0-39d42364bccd" >
+			<route >
+				<file:write doc:name="Write" doc:id="4ee4a7b1-3f61-44fb-b513-729fe300bc12" path="/Users/djuang/Desktop/dataset.jsonl"/>
+			</route>
+			<route >
+				<s3:put-object doc:name="Put Object" doc:id="8ef4496c-845c-405b-a757-11e6c5143efa" config-ref="Amazon_S3_Configuration" bucketName="mulesoft-reinvent2023" key="dataset.jsonl" />
+			</route>
+		</scatter-gather>
+	</flow>
+</mule>

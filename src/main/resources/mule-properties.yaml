@@ -1,0 +1,7 @@
+sfdc:
+  username: ""
+  password: ""
+  
+aws:
+  secret: ""
+  key: ""
