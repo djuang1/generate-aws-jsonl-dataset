@@ -44,11 +44,21 @@ payload map ( payload01 , indexOfPayload01 ) -> {
 		</java:invoke-static>
 		<scatter-gather doc:name="Scatter-Gather" doc:id="cff2b52c-1ac3-414f-9be0-39d42364bccd" >
 			<route >
-				<file:write doc:name="Write" doc:id="4ee4a7b1-3f61-44fb-b513-729fe300bc12" path="/Users/djuang/Desktop/dataset.jsonl"/>
+				<file:write doc:name="Write" doc:id="4ee4a7b1-3f61-44fb-b513-729fe300bc12" path='#["/Users/djuang/Desktop/dataset" ++ now() as String {format: "y-MM-dd_hh_m_s"} ++ ".jsonl"]'/>
 			</route>
 			<route >
-				<s3:put-object doc:name="Put Object" doc:id="8ef4496c-845c-405b-a757-11e6c5143efa" config-ref="Amazon_S3_Configuration" bucketName="mulesoft-reinvent2023" key="dataset.jsonl" />
+				<s3:put-object doc:name="Put Object" doc:id="8ef4496c-845c-405b-a757-11e6c5143efa" config-ref="Amazon_S3_Configuration" bucketName="mulesoft-reinvent2023" key='#["dataset" ++ now() as String {format: "y-MM-dd hh:m:s"} ++ ".jsonl"]' />
 			</route>
 		</scatter-gather>
+		<ee:transform doc:name="Transform Message" doc:id="24e89097-7556-43e0-a8e9-0ff8ded04f2a" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+	"Status": "Dataset Generated"
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
 	</flow>
 </mule>
